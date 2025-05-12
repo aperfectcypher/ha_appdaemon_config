@@ -1,0 +1,6 @@
+---
+house_power:
+  module: housepower
+  class: HousePower
+  peblar_ip: !secret peblar_ip
+  peblar_password: !secret peblar_password
