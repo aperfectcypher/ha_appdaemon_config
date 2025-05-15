@@ -1,5 +1,9 @@
 import appdaemon.plugins.hass.hassapi as hass
 
+import requests
+
+import json
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -12,11 +16,13 @@ from selenium.webdriver.support import expected_conditions as EC
 
 class HousePower(hass.Hass):
 
-  def initialize(self):
-    self.run_every(self.read_amps, "now", 20) # update every 20 sec
+  sessionCookie = ''
 
-  def read_amps(self, kwargs):  
-    # passing secrets: https://appdaemon.readthedocs.io/en/latest/APPGUIDE.html#secrets
+  def initialize(self):
+    self.auth()
+    self.run_every(self.read_amps, "now", 5) # update every 5 sec
+
+  def auth(self):
     ip = self.args["peblar_ip"]
     password = self.args["peblar_password"]
     url = f"http://{ip}/system/3"
@@ -46,22 +52,44 @@ class HousePower(hass.Hass):
     table_xpath = "//div[contains(text(), ' A')]"
     element = wait.until(EC.presence_of_element_located((By.XPATH, table_xpath)))
 
-    # get all current measurements
-    current_measurements = driver.find_elements(By.XPATH, "//div[contains(text(), ' A')]")
+    all_cookies=driver.get_cookies()
+    cookies_dict = {}
+    for cookie in all_cookies:
+        cookies_dict[cookie['name']] = cookie['value']
 
-    # Convert to Watts
+    self.sessionCookie = cookies_dict['sessionid']
+    print("New session cookie: ", self.sessionCookie)
+
+    driver.close()
+
+
+  def read_amps(self, kwargs):
+    headers = {
+    "Cookie": "sessionid="+self.sessionCookie,
+    }
+
+    r = requests.get('http://192.168.0.63/api/v1/system/diagnostics/snapshot?Type=LiveDiagnostics', headers=headers)
+    if r.status_code == 401: #unauthorized, re-auth
+      self.auth()
+
+    if r.status_code != 200:
+      print("Request returned unexpected error code: ", r.status_code)
+      print(r.text)
+      return
+
+    data = json.loads(r.text)
+    
+    ### Convert to Watts
     phases_amps_str = []
     phases_amps = []
     phases_power = []
 
     for i in range(3):
-        phases_amps_str.append(str(current_measurements[i].text))
-        phases_amps.append(float(phases_amps_str[i][:4]))
+        phases_amps_str.append(str(data['Signals'][0]['Value'][i]))
+        phases_amps.append(float(phases_amps_str[i]))
         phases_power.append(phases_amps[i]*230)
     
     # Write values to HA entities
     self.set_value("input_number.house_power_phase_1",phases_power[0])
     self.set_value("input_number.house_power_phase_2",phases_power[1])
     self.set_value("input_number.house_power_phase_3",phases_power[2])
-
-    driver.close()
