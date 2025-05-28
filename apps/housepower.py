@@ -84,12 +84,22 @@ class HousePower(hass.Hass):
     phases_amps = []
     phases_power = []
 
+    phases_volts_str = []
+    phases_volts = []
+
     for i in range(3):
         phases_amps_str.append(str(data['Signals'][0]['Value'][i]))
         phases_amps.append(float(phases_amps_str[i]))
-        phases_power.append(phases_amps[i]*230)
+        phases_volts_str.append(str(data['Signals'][2]['Value'][i]))
+        phases_volts.append(float(phases_volts_str[i]))
+        phases_power.append(phases_amps[i]*phases_volts[i])
+
+    # charge limit (in amps) from dynamic load balancing 
+    charge_limit = float(str(data['Signals'][3]['Value'][0]))
     
     # Write values to HA entities
     self.set_value("input_number.house_power_phase_1",phases_power[0])
     self.set_value("input_number.house_power_phase_2",phases_power[1])
     self.set_value("input_number.house_power_phase_3",phases_power[2])
+    self.set_value("input_number.ev_charger_limit", charge_limit)
+    
