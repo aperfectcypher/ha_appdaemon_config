@@ -20,7 +20,7 @@ class HousePower(hass.Hass):
 
   def initialize(self):
     self.auth()
-    self.run_every(self.read_amps, "now", 5) # update every 5 sec
+    self.run_every(self.read_power, "now", 10) # update every 10 sec
 
   def auth(self):
     ip = self.args["peblar_ip"]
@@ -63,12 +63,13 @@ class HousePower(hass.Hass):
     driver.close()
 
 
-  def read_amps(self, kwargs):
+  def read_power(self, kwargs):
     headers = {
     "Cookie": "sessionid="+self.sessionCookie,
     }
-
-    r = requests.get('http://192.168.0.63/api/v1/system/diagnostics/snapshot?Type=LiveDiagnostics', headers=headers)
+    ip = self.args["peblar_ip"]
+    diag_url = f"http://{ip}/api/v1/system/diagnostics/snapshot?Type=LiveDiagnostics"
+    r = requests.get(diag_url, headers=headers)
     if r.status_code == 401: #unauthorized, re-auth
       self.auth()
 
